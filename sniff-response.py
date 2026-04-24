@@ -1,10 +1,14 @@
 import paho.mqtt.client as mqtt
 import json
 import ssl
+import os
+from dotenv import load_dotenv
 
-IP = "192.168.0.101"
-SERIAL = "22E8BJ5A1601438"
-ACCESS_CODE = "0d5a71f6"
+load_dotenv()
+
+IP = os.getenv("PRINTER_IP")
+SERIAL = os.getenv("PRINTER_SERIAL")
+ACCESS_CODE = os.getenv("ACCESS_CODE")
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:

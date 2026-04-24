@@ -1,4 +1,5 @@
-flask
-flask-socketio
+fastapi
+uvicorn[standard]
 paho-mqtt
-eventlet
+python-dotenv
+python-multipart

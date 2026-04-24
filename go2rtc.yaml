@@ -1,0 +1,4 @@
+streams:
+  p2s_camera:
+    # Notice the #insecure=1 flag at the end. This is the magic bypass.
+    - rtsps://bblp:0d5a71f6@192.168.0.100:322/streaming/live/1#insecure=1

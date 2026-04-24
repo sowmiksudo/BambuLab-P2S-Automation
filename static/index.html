@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BambuLab P2S — Orchestration Gateway</title>
+    <meta name="description"
+        content="Local orchestration dashboard for BambuLab P2S 3D Printer with live telemetry, light control, and file upload.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        surface: { 900: '#0e0e11', 800: '#151519', 700: '#1a1a1f', 600: '#22222a' },
+                        neon: { 400: '#4ade80', 500: '#22c55e', 600: '#16a34a' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background: #0e0e11;
+        }
+
+        @keyframes pulse-glow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 8px rgba(34, 197, 94, 0.2)
+            }
+
+            50% {
+                box-shadow: 0 0 20px rgba(34, 197, 94, 0.4)
+            }
+        }
+
+        @keyframes shimmer {
+            0% {
+                background-position: -200% 0
+            }
+
+            100% {
+                background-position: 200% 0
+            }
+        }
+
+        .status-connecting {
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+
+        .shimmer-bar {
+            background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.04) 50%, transparent 100%);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+        }
+
+        .metric-card {
+            transition: transform 0.3s cubic-bezier(.4, 0, .2, 1), box-shadow 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .btn-ctrl {
+            transition: all 0.2s ease;
+        }
+
+        .btn-ctrl:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateY(-1px);
+        }
+
+        .btn-ctrl:active {
+            transform: scale(0.97);
+        }
+
+        .drop-zone.drag-over {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.05);
+        }
+
+        .progress-fill {
+            transition: width 0.6s cubic-bezier(.4, 0, .2, 1);
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease forwards;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+    </style>
+</head>
+
+<body class="font-sans text-white min-h-screen flex items-center justify-center p-4 antialiased">
+
+    <main id="app" class="w-full max-w-2xl fade-in">
+        <!-- Main Card Container -->
+        <div
+            class="bg-surface-800/60 backdrop-blur-xl border border-white/[0.06] rounded-3xl p-8 md:p-10 shadow-2xl shadow-black/50 space-y-7">
+
+            <!-- Header -->
+            <header class="flex items-center justify-between">
+                <h1
+                    class="text-2xl md:text-3xl font-bold bg-gradient-to-r from-neon-400 to-emerald-300 bg-clip-text text-transparent tracking-tight">
+                    BambuLab P2S
+                </h1>
+                <div id="status-badge"
+                    class="status-connecting px-4 py-1.5 rounded-full text-xs font-semibold tracking-widest uppercase border border-neon-500/30 bg-neon-500/10 text-neon-400">
+                    CONNECTING…
+                </div>
+            </header>
+
+            <!-- Telemetry Grid -->
+            <section class="grid grid-cols-2 gap-4" aria-label="Printer Telemetry">
+                <div class="metric-card bg-surface-700/50 border border-white/[0.04] rounded-2xl p-5 text-center">
+                    <p class="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-2">Nozzle</p>
+                    <p class="text-3xl md:text-4xl font-extrabold text-white leading-none">
+                        <span id="nozzle-temp">--</span>
+                        <span class="text-sm font-normal text-gray-600 ml-1">°C</span>
+                    </p>
+                </div>
+                <div class="metric-card bg-surface-700/50 border border-white/[0.04] rounded-2xl p-5 text-center">
+                    <p class="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-2">Bed</p>
+                    <p class="text-3xl md:text-4xl font-extrabold text-white leading-none">
+                        <span id="bed-temp">--</span>
+                        <span class="text-sm font-normal text-gray-600 ml-1">°C</span>
+                    </p>
+                </div>
+                <div class="metric-card bg-surface-700/50 border border-white/[0.04] rounded-2xl p-5 text-center">
+                    <p class="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-2">Chamber</p>
+                    <p class="text-3xl md:text-4xl font-extrabold text-white leading-none">
+                        <span id="chamber-temp">--</span>
+                        <span class="text-sm font-normal text-gray-600 ml-1">°C</span>
+                    </p>
+                </div>
+                <div class="metric-card bg-surface-700/50 border border-white/[0.04] rounded-2xl p-5 text-center">
+                    <p class="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-2">Status</p>
+                    <p id="printer-status-text" class="text-lg md:text-xl font-bold text-neon-400 leading-none mt-2">--
+                    </p>
+                </div>
+            </section>
+
+            <!-- Progress Bar -->
+            <section class="bg-surface-700/50 border border-white/[0.04] rounded-2xl p-5" aria-label="Print Progress">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-xs text-gray-500 uppercase tracking-wider font-medium">Print Progress</span>
+                    <span id="progress-text" class="text-sm font-bold text-white tabular-nums">0%</span>
+                </div>
+                <div class="w-full h-3 bg-white/[0.06] rounded-full overflow-hidden">
+                    <div id="progress-bar"
+                        class="progress-fill h-full rounded-full bg-gradient-to-r from-neon-500 to-emerald-400"
+                        style="width: 0%"></div>
+                </div>
+            </section>
+
+            <!-- Light Controls -->
+            <section class="grid grid-cols-2 gap-4" aria-label="Light Controls">
+                <button id="btn-light-on" onclick="controlLight('on')"
+                    class="btn-ctrl flex items-center justify-center gap-2 bg-white/[0.04] border border-white/[0.06] rounded-xl py-3.5 px-4 font-semibold text-sm cursor-pointer">
+                    <span class="text-lg">☀️</span> Light ON
+                </button>
+                <button id="btn-light-off" onclick="controlLight('off')"
+                    class="btn-ctrl flex items-center justify-center gap-2 bg-white/[0.04] border border-white/[0.06] rounded-xl py-3.5 px-4 font-semibold text-sm cursor-pointer text-gray-400">
+                    <span class="text-lg">🌙</span> Light OFF
+                </button>
+            </section>
+
+            <!-- File Upload Drop Zone -->
+            <section aria-label="File Upload">
+                <div id="drop-zone"
+                    class="drop-zone border-2 border-dashed border-white/[0.08] rounded-2xl p-8 text-center cursor-pointer hover:border-white/[0.15] transition-colors">
+                    <input type="file" id="file-input" accept=".3mf" class="hidden">
+                    <div class="space-y-2">
+                        <p class="text-2xl">📦</p>
+                        <p class="text-sm font-medium text-gray-400">Drop <span
+                                class="text-neon-400 font-semibold">.gcode.3mf</span> here or <span
+                                class="underline underline-offset-2 decoration-gray-600 hover:decoration-neon-400 transition-colors">browse</span>
+                        </p>
+                        <p id="upload-status" class="text-xs text-gray-600 mt-1"></p>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+
+
+        <div
+            class="w-full bg-[#16161a] rounded-xl overflow-hidden border border-gray-800 shadow-lg relative aspect-video">
+
+            <div
+                class="absolute top-4 right-4 z-10 bg-red-600/90 text-white text-xs font-bold px-2 py-1 rounded shadow animate-pulse">
+                • LIVE
+            </div>
+
+            <iframe src="http://localhost:1984/stream.html?src=p2s_camera&mode=webrtc"
+                class="w-full h-full border-none pointer-events-none" allow="autoplay; fullscreen" muted>
+            </iframe>
+
+        </div>
+
+        <!-- Footer -->
+        <p class="text-center text-[10px] text-gray-700 mt-4 tracking-wide">LOCAL GATEWAY · NOT CLOUD CONNECTED</p>
+    </main>
+
+    <script>
+        /* ─── WebSocket Telemetry ─── */
+        const WS_URL = `ws://${location.host}/ws`;
+        let ws = null;
+        let reconnectTimer = null;
+
+        const $ = id => document.getElementById(id);
+        const badge = $('status-badge');
+        const nozzle = $('nozzle-temp');
+        const bed = $('bed-temp');
+        const chamber = $('chamber-temp');
+        const progBar = $('progress-bar');
+        const progTxt = $('progress-text');
+        const statusTxt = $('printer-status-text');
+        const uploadStatus = $('upload-status');
+
+        function connectWS() {
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                badge.textContent = 'ONLINE';
+                badge.classList.remove('status-connecting');
+                badge.classList.add('bg-neon-500/20', 'border-neon-500/40');
+                clearTimeout(reconnectTimer);
+                // Send a keepalive ping every 25s
+                setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
+            };
+
+            ws.onmessage = (e) => {
+                try {
+                    const d = JSON.parse(e.data);
+                    if (d.nozzle_temp !== undefined && d.nozzle_temp !== '--')
+                        nozzle.textContent = Math.round(d.nozzle_temp);
+                    if (d.bed_temp !== undefined && d.bed_temp !== '--')
+                        bed.textContent = Math.round(d.bed_temp);
+                    if (d.chamber_temp !== undefined && d.chamber_temp !== '--')
+                        chamber.textContent = Math.round(d.chamber_temp);
+                    if (d.progress !== undefined) {
+                        const p = parseInt(d.progress);
+                        progBar.style.width = p + '%';
+                        progTxt.textContent = p + '%';
+                    }
+                    if (d.status) {
+                        statusTxt.textContent = d.status;
+                        // Update badge for key states
+                        if (d.status === 'ONLINE' || d.status === 'PRINTING' || d.status === 'IDLE') {
+                            badge.textContent = d.status;
+                            badge.className = 'px-4 py-1.5 rounded-full text-xs font-semibold tracking-widest uppercase border border-neon-500/30 bg-neon-500/10 text-neon-400';
+                        } else if (d.status === 'RECONNECTING' || d.status === 'CONNECTING') {
+                            badge.textContent = d.status + '…';
+                            badge.className = 'status-connecting px-4 py-1.5 rounded-full text-xs font-semibold tracking-widest uppercase border border-yellow-500/30 bg-yellow-500/10 text-yellow-400';
+                        } else if (d.status === 'ERROR' || d.status === 'FAILED') {
+                            badge.textContent = d.status;
+                            badge.className = 'px-4 py-1.5 rounded-full text-xs font-semibold tracking-widest uppercase border border-red-500/30 bg-red-500/10 text-red-400';
+                        }
+                    }
+                } catch (_) { }
+            };
+
+            ws.onclose = () => {
+                badge.textContent = 'OFFLINE';
+                badge.className = 'status-connecting px-4 py-1.5 rounded-full text-xs font-semibold tracking-widest uppercase border border-red-500/30 bg-red-500/10 text-red-400';
+                reconnectTimer = setTimeout(connectWS, 3000);
+            };
+
+            ws.onerror = () => ws.close();
+        }
+
+        connectWS();
+
+        /* ─── Light Control ─── */
+        async function controlLight(action) {
+            const btn = action === 'on' ? $('btn-light-on') : $('btn-light-off');
+            btn.classList.add('opacity-50');
+            try {
+                const res = await fetch(`/api/light/${action}`, { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    btn.classList.add('ring-1', 'ring-neon-500/50');
+                    setTimeout(() => btn.classList.remove('ring-1', 'ring-neon-500/50'), 1500);
+                }
+            } catch (err) {
+                console.error('Light control error:', err);
+            } finally {
+                btn.classList.remove('opacity-50');
+            }
+        }
+
+        /* ─── File Upload (Drag & Drop + Click) ─── */
+        const dropZone = $('drop-zone');
+        const fileInput = $('file-input');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) uploadFile(e.target.files[0]);
+        });
+
+        ['dragenter', 'dragover'].forEach(evt => {
+            dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+        });
+        ['dragleave', 'drop'].forEach(evt => {
+            dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); });
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const file = e.dataTransfer.files[0];
+            if (file) uploadFile(file);
+        });
+
+        async function uploadFile(file) {
+            if (!file.name.endsWith('.3mf')) {
+                uploadStatus.textContent = '⚠ Only .gcode.3mf files accepted';
+                uploadStatus.className = 'text-xs text-red-400 mt-1';
+                return;
+            }
+
+            uploadStatus.textContent = `⏳ Uploading ${file.name}…`;
+            uploadStatus.className = 'text-xs text-yellow-400 mt-1';
+            dropZone.classList.add('opacity-60', 'pointer-events-none');
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const res = await fetch('/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    uploadStatus.textContent = `✅ ${data.message}`;
+                    uploadStatus.className = 'text-xs text-neon-400 mt-1';
+                } else {
+                    uploadStatus.textContent = `❌ ${data.message}`;
+                    uploadStatus.className = 'text-xs text-red-400 mt-1';
+                }
+            } catch (err) {
+                uploadStatus.textContent = '❌ Upload failed — check console';
+                uploadStatus.className = 'text-xs text-red-400 mt-1';
+                console.error(err);
+            } finally {
+                dropZone.classList.remove('opacity-60', 'pointer-events-none');
+                fileInput.value = '';
+            }
+        }
+    </script>
+</body>
+
+</html>
