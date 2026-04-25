@@ -93,3 +93,6 @@ Open your browser and navigate to `http://localhost:8000` to access the dashboar
 If this tool saved your print farm from cloud outages or region-lock headaches, consider supporting the development! 
 
 Pull requests are welcome. For major architectural changes, please open an issue first to discuss what you would like to change.
+
+Author: Shayer Mahmud Sowmik
+Originally created for `BOT Engineers`, Bangladesh.
