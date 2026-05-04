@@ -1,0 +1,78 @@
+
+[INTERCEPTED PAYLOAD on device/22E8BJ5A1601438/request]:
+{
+  "print": {
+    "ams_mapping": [
+      -1
+    ],
+    "ams_mapping2": [
+      {
+        "ams_id": 255,
+        "slot_id": 0
+      }
+    ],
+    "auto_bed_leveling": 2,
+    "bed_leveling": false,
+    "bed_type": "textured_plate",
+    "cfg": "0",
+    "command": "project_file",
+    "extrude_cali_flag": 2,
+    "extrude_cali_manual_mode": 0,
+    "file": "Banana_Benchy.gcode.3mf",
+    "flow_cali": false,
+    "layer_inspect": true,
+    "md5": "38D35C1902EA67C625434142C73C91FB",
+    "nozzle_offset_cali": 2,
+    "param": "Metadata/plate_1.gcode",
+    "profile_id": "0",
+    "project_id": "0",
+    "sequence_id": "20001",
+    "subtask_id": "0",
+    "subtask_name": "Banana_Benchy",
+    "task_id": "0",
+    "timelapse": false,
+    "url": "ftp://Banana_Benchy.gcode.3mf",
+    "use_ams": false,
+    "vibration_cali": false
+  }
+}
+
+[INTERCEPTED PAYLOAD on device/22E8BJ5A1601438/request]:
+{
+  "print": {
+    "command": "pause",
+    "param": "",
+    "sequence_id": "20005"
+  }
+}
+
+[INTERCEPTED PAYLOAD on device/22E8BJ5A1601438/request]:
+{
+  "print": {
+    "command": "resume",
+    "param": "",
+    "sequence_id": "20006"
+  }
+}
+
+[INTERCEPTED PAYLOAD on device/22E8BJ5A1601438/request]:
+{
+  "print": {
+    "command": "stop",
+    "param": "",
+    "sequence_id": "20007"
+  }
+}
+
+[INTERCEPTED PAYLOAD on device/22E8BJ5A1601438/request]:
+{
+  "system": {
+    "action": "close",
+    "command": "uiop",
+    "err": "0300400C",
+    "name": "print_error",
+    "sequence_id": "20008",
+    "source": 1,
+    "type": "dialog"
+  }
+}

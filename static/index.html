@@ -3,366 +3,805 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BambuLab P2S — Orchestration Gateway</title>
-    <meta name="description"
-        content="Local orchestration dashboard for BambuLab P2S 3D Printer with live telemetry, light control, and file upload.">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>BambuLab P2S — Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
-                    colors: {
-                        surface: { 900: '#0e0e11', 800: '#151519', 700: '#1a1a1f', 600: '#22222a' },
-                        neon: { 400: '#4ade80', 500: '#22c55e', 600: '#16a34a' }
-                    }
-                }
-            }
-        }
-    </script>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        :root {
+            --bg: #0a0a0f;
+            --s1: #111118;
+            --s2: #17171f;
+            --s3: #1e1e28;
+            --border: rgba(255, 255, 255, 0.06);
+            --g1: #4ade80;
+            --dim: #71717a;
+            --dim2: #52525b;
+            --txt: #e4e4e7
+        }
+
         body {
-            background: #0e0e11;
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--txt);
+            min-height: 100vh;
+            padding: 16px;
+            -webkit-font-smoothing: antialiased
         }
 
-        @keyframes pulse-glow {
+        .shell {
+            max-width: 1100px;
+            margin: 0 auto
+        }
 
-            0%,
-            100% {
-                box-shadow: 0 0 8px rgba(34, 197, 94, 0.2)
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #4ade80, #34d399);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent
+        }
+
+        .badge {
+            padding: 6px 14px;
+            border-radius: 99px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            border: 1px solid rgba(74, 222, 128, 0.3);
+            background: rgba(74, 222, 128, 0.08);
+            color: #4ade80
+        }
+
+        .badge.warn {
+            border-color: rgba(250, 204, 21, 0.3);
+            background: rgba(250, 204, 21, 0.08);
+            color: #facc15
+        }
+
+        .badge.err {
+            border-color: rgba(239, 68, 68, 0.3);
+            background: rgba(239, 68, 68, 0.08);
+            color: #ef4444
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 16px;
+            overflow-x: auto
+        }
+
+        .tab {
+            padding: 8px 18px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid transparent;
+            background: var(--s2);
+            color: var(--dim);
+            transition: all .2s;
+            white-space: nowrap
+        }
+
+        .tab:hover {
+            color: var(--txt);
+            background: var(--s3)
+        }
+
+        .tab.active {
+            background: rgba(74, 222, 128, 0.1);
+            border-color: rgba(74, 222, 128, 0.25);
+            color: #4ade80
+        }
+
+        .panel {
+            display: none
+        }
+
+        .panel.active {
+            display: block
+        }
+
+        .grid {
+            display: grid;
+            gap: 12px
+        }
+
+        .g2 {
+            grid-template-columns: repeat(2, 1fr)
+        }
+
+        .g3 {
+            grid-template-columns: repeat(3, 1fr)
+        }
+
+        .g4 {
+            grid-template-columns: repeat(4, 1fr)
+        }
+
+        @media(max-width:700px) {
+
+            .g3,
+            .g4 {
+                grid-template-columns: repeat(2, 1fr)
             }
-
-            50% {
-                box-shadow: 0 0 20px rgba(34, 197, 94, 0.4)
-            }
         }
 
-        @keyframes shimmer {
-            0% {
-                background-position: -200% 0
-            }
-
-            100% {
-                background-position: 200% 0
-            }
+        .card {
+            background: var(--s2);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            transition: transform .2s
         }
 
-        .status-connecting {
-            animation: pulse-glow 2s ease-in-out infinite;
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4)
         }
 
-        .shimmer-bar {
-            background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.04) 50%, transparent 100%);
-            background-size: 200% 100%;
-            animation: shimmer 2s infinite;
+        .card-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--dim);
+            font-weight: 600;
+            margin-bottom: 6px
         }
 
-        .metric-card {
-            transition: transform 0.3s cubic-bezier(.4, 0, .2, 1), box-shadow 0.3s ease;
+        .card-val {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #fff;
+            line-height: 1
         }
 
-        .metric-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+        .card-val .unit {
+            font-size: .7rem;
+            font-weight: 400;
+            color: var(--dim2);
+            margin-left: 2px
         }
 
-        .btn-ctrl {
-            transition: all 0.2s ease;
+        .card-sub {
+            font-size: 11px;
+            color: var(--dim);
+            margin-top: 4px
         }
 
-        .btn-ctrl:hover {
-            background: rgba(255, 255, 255, 0.08);
-            transform: translateY(-1px);
+        .card-sm .card-val {
+            font-size: 1.2rem
         }
 
-        .btn-ctrl:active {
-            transform: scale(0.97);
+        .progress-wrap {
+            background: var(--s2);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px
         }
 
-        .drop-zone.drag-over {
-            border-color: #22c55e;
-            background: rgba(34, 197, 94, 0.05);
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px
+        }
+
+        .progress-header span {
+            font-size: 11px;
+            color: var(--dim);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px
+        }
+
+        .progress-header strong {
+            font-size: 14px;
+            color: #fff;
+            font-variant-numeric: tabular-nums
+        }
+
+        .progress-track {
+            width: 100%;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 99px;
+            overflow: hidden
         }
 
         .progress-fill {
-            transition: width 0.6s cubic-bezier(.4, 0, .2, 1);
+            height: 100%;
+            border-radius: 99px;
+            background: linear-gradient(90deg, #22c55e, #4ade80);
+            transition: width .6s
         }
 
-        .fade-in {
-            animation: fadeIn 0.5s ease forwards;
+        .job-name {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--txt);
+            margin-bottom: 2px
         }
 
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(8px)
+        .job-meta {
+            font-size: 11px;
+            color: var(--dim)
+        }
+
+        .live-wrap {
+            position: relative;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: #000;
+            aspect-ratio: 16/9;
+            margin-top: 12px
+        }
+
+        .live-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 2;
+            background: rgba(220, 38, 38, 0.85);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 6px;
+            animation: pulse 2s infinite
+        }
+
+        .live-wrap iframe {
+            width: 100%;
+            height: 100%;
+            border: none
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1
             }
 
-            to {
-                opacity: 1;
-                transform: translateY(0)
+            50% {
+                opacity: .6
             }
+        }
+
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--s2);
+            color: var(--txt);
+            transition: all .15s
+        }
+
+        .btn:hover {
+            background: var(--s3);
+            transform: translateY(-1px)
+        }
+
+        .btn:active {
+            transform: scale(.97)
+        }
+
+        .btn.accent {
+            background: rgba(74, 222, 128, 0.1);
+            border-color: rgba(74, 222, 128, 0.2);
+            color: #4ade80
+        }
+
+        .btn.warn {
+            background: rgba(250, 204, 21, 0.08);
+            border-color: rgba(250, 204, 21, 0.2);
+            color: #facc15
+        }
+
+        .btn.danger {
+            background: rgba(239, 68, 68, 0.08);
+            border-color: rgba(239, 68, 68, 0.2);
+            color: #ef4444
+        }
+
+        .btn.blue {
+            background: rgba(56, 189, 248, 0.08);
+            border-color: rgba(56, 189, 248, 0.2);
+            color: #38bdf8
+        }
+
+        .drop-zone {
+            border: 2px dashed rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 28px;
+            text-align: center;
+            cursor: pointer;
+            transition: all .2s
+        }
+
+        .drop-zone:hover,
+        .drop-zone.drag-over {
+            border-color: rgba(74, 222, 128, 0.4);
+            background: rgba(74, 222, 128, 0.03)
+        }
+
+        .drop-zone input {
+            display: none
+        }
+
+        #upload-status {
+            font-size: 11px;
+            color: var(--dim);
+            margin-top: 6px
+        }
+
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: var(--s2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 8px
+        }
+
+        .toggle-row label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--txt)
+        }
+
+        .toggle {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            cursor: pointer
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0
+        }
+
+        .toggle .slider {
+            position: absolute;
+            inset: 0;
+            background: var(--dim2);
+            border-radius: 22px;
+            transition: .2s
+        }
+
+        .toggle .slider:before {
+            content: '';
+            position: absolute;
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: .2s
+        }
+
+        .toggle input:checked+.slider {
+            background: #22c55e
+        }
+
+        .toggle input:checked+.slider:before {
+            transform: translateX(18px)
+        }
+
+        .swatch {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-block;
+            vertical-align: middle;
+            border: 2px solid var(--border);
+            margin-right: 6px
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px
+        }
+
+        .dot.on {
+            background: #4ade80;
+            box-shadow: 0 0 8px rgba(74, 222, 128, 0.5)
+        }
+
+        .dot.off {
+            background: var(--dim2)
+        }
+
+        .dot.flash {
+            background: #facc15;
+            animation: pulse 1s infinite
+        }
+
+        .hms-item {
+            padding: 8px 12px;
+            background: rgba(250, 204, 21, 0.06);
+            border: 1px solid rgba(250, 204, 21, 0.15);
+            border-radius: 10px;
+            font-size: 11px;
+            color: #facc15;
+            margin-bottom: 6px
+        }
+
+        .no-alerts {
+            text-align: center;
+            padding: 16px;
+            color: var(--dim);
+            font-size: 12px
+        }
+
+        footer {
+            text-align: center;
+            font-size: 10px;
+            color: var(--dim2);
+            margin-top: 20px;
+            letter-spacing: 1px
+        }
+
+        .section-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--dim);
+            margin: 16px 0 8px
         }
     </style>
 </head>
 
-<body class="font-sans text-white min-h-screen flex items-center justify-center p-4 antialiased">
+<body>
+    <div class="shell">
+        <header>
+            <h1>BambuLab P2S</h1>
+            <div id="badge" class="badge">CONNECTING…</div>
+        </header>
+        <nav class="tabs" id="tabs">
+            <div class="tab active" data-tab="overview">Overview</div>
+            <div class="tab" data-tab="thermal">Thermal</div>
+            <div class="tab" data-tab="fans">Fans & Speed</div>
+            <div class="tab" data-tab="hardware">Hardware</div>
+            <div class="tab" data-tab="controls">Controls & Upload</div>
+        </nav>
 
-    <main id="app" class="w-full max-w-2xl fade-in">
-        <!-- Main Card Container -->
-        <div
-            class="bg-surface-800/60 backdrop-blur-xl border border-white/[0.06] rounded-3xl p-8 md:p-10 shadow-2xl shadow-black/50 space-y-7">
+        <!-- OVERVIEW -->
+        <div id="p-overview" class="panel active">
+            <div class="progress-wrap">
+                <div class="job-name" id="job-name">--</div>
+                <div class="job-meta"><span id="layer-info">Layer -- / --</span> · <span id="eta">ETA --</span> · Task
+                    <span id="task-id">--</span></div>
+                <div style="height:8px"></div>
+                <div class="progress-header"><span>Progress</span><strong id="prog-txt">0%</strong></div>
+                <div class="progress-track">
+                    <div id="prog-bar" class="progress-fill" style="width:0%"></div>
+                </div>
+            </div>
+            <div class="grid g4">
+                <div class="card">
+                    <div class="card-label">Nozzle</div>
+                    <div class="card-val"><span id="o-nozzle">--</span><span class="unit">°C</span></div>
+                    <div class="card-sub">Target: <span id="o-nozzle-t">0</span>°C</div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Bed</div>
+                    <div class="card-val"><span id="o-bed">--</span><span class="unit">°C</span></div>
+                    <div class="card-sub">Target: <span id="o-bed-t">0</span>°C</div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Chamber</div>
+                    <div class="card-val"><span id="o-chamber">--</span><span class="unit">°C</span></div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Status</div>
+                    <div class="card-val" style="font-size:1.1rem;color:#4ade80" id="o-status">--</div>
+                </div>
+            </div>
+            <div class="live-wrap">
+                <div class="live-badge">● LIVE</div><iframe
+                    src="http://localhost:1984/stream.html?src=p2s_camera&mode=webrtc"
+                    allow="autoplay;fullscreen"></iframe>
+            </div>
+        </div>
 
-            <!-- Header -->
-            <header class="flex items-center justify-between">
-                <h1
-                    class="text-2xl md:text-3xl font-bold bg-gradient-to-r from-neon-400 to-emerald-300 bg-clip-text text-transparent tracking-tight">
-                    BambuLab P2S
-                </h1>
-                <div id="status-badge"
-                    class="status-connecting px-4 py-1.5 rounded-full text-xs font-semibold tracking-widest uppercase border border-neon-500/30 bg-neon-500/10 text-neon-400">
-                    CONNECTING…
+        <!-- THERMAL -->
+        <div id="p-thermal" class="panel">
+            <div class="grid g3">
+                <div class="card">
+                    <div class="card-label">Nozzle Temp</div>
+                    <div class="card-val"><span id="t-nozzle">--</span><span class="unit">°C</span></div>
+                    <div class="card-sub">Target: <span id="t-nozzle-t">0</span>°C</div>
                 </div>
-            </header>
+                <div class="card">
+                    <div class="card-label">Bed Temp</div>
+                    <div class="card-val"><span id="t-bed">--</span><span class="unit">°C</span></div>
+                    <div class="card-sub">Target: <span id="t-bed-t">0</span>°C</div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Chamber Temp</div>
+                    <div class="card-val"><span id="t-chamber">--</span><span class="unit">°C</span></div>
+                </div>
+            </div>
+            <div style="height:12px"></div>
+            <div class="grid g2">
+                <div class="card card-sm">
+                    <div class="card-label">Nozzle Type</div>
+                    <div class="card-val" id="t-ntype">--</div>
+                </div>
+                <div class="card card-sm">
+                    <div class="card-label">Nozzle Diameter</div>
+                    <div class="card-val"><span id="t-ndia">--</span><span class="unit">mm</span></div>
+                </div>
+            </div>
+        </div>
 
-            <!-- Telemetry Grid -->
-            <section class="grid grid-cols-2 gap-4" aria-label="Printer Telemetry">
-                <div class="metric-card bg-surface-700/50 border border-white/[0.04] rounded-2xl p-5 text-center">
-                    <p class="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-2">Nozzle</p>
-                    <p class="text-3xl md:text-4xl font-extrabold text-white leading-none">
-                        <span id="nozzle-temp">--</span>
-                        <span class="text-sm font-normal text-gray-600 ml-1">°C</span>
-                    </p>
+        <!-- FANS -->
+        <div id="p-fans" class="panel">
+            <div class="grid g4">
+                <div class="card card-sm">
+                    <div class="card-label">Part Cooling</div>
+                    <div class="card-val" id="f-cool">0</div>
                 </div>
-                <div class="metric-card bg-surface-700/50 border border-white/[0.04] rounded-2xl p-5 text-center">
-                    <p class="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-2">Bed</p>
-                    <p class="text-3xl md:text-4xl font-extrabold text-white leading-none">
-                        <span id="bed-temp">--</span>
-                        <span class="text-sm font-normal text-gray-600 ml-1">°C</span>
-                    </p>
+                <div class="card card-sm">
+                    <div class="card-label">Aux Fan 1</div>
+                    <div class="card-val" id="f-big1">0</div>
                 </div>
-                <div class="metric-card bg-surface-700/50 border border-white/[0.04] rounded-2xl p-5 text-center">
-                    <p class="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-2">Chamber</p>
-                    <p class="text-3xl md:text-4xl font-extrabold text-white leading-none">
-                        <span id="chamber-temp">--</span>
-                        <span class="text-sm font-normal text-gray-600 ml-1">°C</span>
-                    </p>
+                <div class="card card-sm">
+                    <div class="card-label">Aux Fan 2</div>
+                    <div class="card-val" id="f-big2">0</div>
                 </div>
-                <div class="metric-card bg-surface-700/50 border border-white/[0.04] rounded-2xl p-5 text-center">
-                    <p class="text-[11px] text-gray-500 uppercase tracking-wider font-medium mb-2">Status</p>
-                    <p id="printer-status-text" class="text-lg md:text-xl font-bold text-neon-400 leading-none mt-2">--
-                    </p>
+                <div class="card card-sm">
+                    <div class="card-label">Heatbreak</div>
+                    <div class="card-val" id="f-hb">0</div>
                 </div>
-            </section>
+            </div>
+            <div style="height:12px"></div>
+            <div class="grid g2">
+                <div class="card">
+                    <div class="card-label">Print Speed</div>
+                    <div class="card-val"><span id="f-mag">100</span><span class="unit">%</span></div>
+                    <div class="card-sub">Level: <span id="f-lvl">2</span></div>
+                </div>
+                <div class="card">
+                    <div class="card-label">Speed Preset</div>
+                    <div class="card-val" id="f-preset" style="font-size:1rem">Standard</div>
+                </div>
+            </div>
+        </div>
 
-            <!-- Progress Bar -->
-            <section class="bg-surface-700/50 border border-white/[0.04] rounded-2xl p-5" aria-label="Print Progress">
-                <div class="flex justify-between items-center mb-3">
-                    <span class="text-xs text-gray-500 uppercase tracking-wider font-medium">Print Progress</span>
-                    <span id="progress-text" class="text-sm font-bold text-white tabular-nums">0%</span>
+        <!-- HARDWARE -->
+        <div id="p-hardware" class="panel">
+            <div class="grid g3">
+                <div class="card card-sm">
+                    <div class="card-label">WiFi Signal</div>
+                    <div class="card-val" id="h-wifi">--</div>
                 </div>
-                <div class="w-full h-3 bg-white/[0.06] rounded-full overflow-hidden">
-                    <div id="progress-bar"
-                        class="progress-fill h-full rounded-full bg-gradient-to-r from-neon-500 to-emerald-400"
-                        style="width: 0%"></div>
+                <div class="card card-sm">
+                    <div class="card-label">SD Card</div>
+                    <div class="card-val" id="h-sd">--</div>
                 </div>
-            </section>
-
-            <!-- Light Controls -->
-            <section class="grid grid-cols-2 gap-4" aria-label="Light Controls">
-                <button id="btn-light-on" onclick="controlLight('on')"
-                    class="btn-ctrl flex items-center justify-center gap-2 bg-white/[0.04] border border-white/[0.06] rounded-xl py-3.5 px-4 font-semibold text-sm cursor-pointer">
-                    <span class="text-lg">☀️</span> Light ON
-                </button>
-                <button id="btn-light-off" onclick="controlLight('off')"
-                    class="btn-ctrl flex items-center justify-center gap-2 bg-white/[0.04] border border-white/[0.06] rounded-xl py-3.5 px-4 font-semibold text-sm cursor-pointer text-gray-400">
-                    <span class="text-lg">🌙</span> Light OFF
-                </button>
-            </section>
-
-            <!-- File Upload Drop Zone -->
-            <section aria-label="File Upload">
-                <div id="drop-zone"
-                    class="drop-zone border-2 border-dashed border-white/[0.08] rounded-2xl p-8 text-center cursor-pointer hover:border-white/[0.15] transition-colors">
-                    <input type="file" id="file-input" accept=".3mf" class="hidden">
-                    <div class="space-y-2">
-                        <p class="text-2xl">📦</p>
-                        <p class="text-sm font-medium text-gray-400">Drop <span
-                                class="text-neon-400 font-semibold">.gcode.3mf</span> here or <span
-                                class="underline underline-offset-2 decoration-gray-600 hover:decoration-neon-400 transition-colors">browse</span>
-                        </p>
-                        <p id="upload-status" class="text-xs text-gray-600 mt-1"></p>
+                <div class="card card-sm">
+                    <div class="card-label">Plate ID</div>
+                    <div class="card-val" id="h-plate">--</div>
+                </div>
+            </div>
+            <div style="height:12px"></div>
+            <div class="grid g3">
+                <div class="card card-sm">
+                    <div class="card-label">Filament</div>
+                    <div class="card-val"><span id="h-swatch" class="swatch"></span><span id="h-filament">--</span>
                     </div>
                 </div>
-            </section>
-
-        </div>
-
-
-        <div
-            class="w-full bg-[#16161a] rounded-xl overflow-hidden border border-gray-800 shadow-lg relative aspect-video">
-
-            <div
-                class="absolute top-4 right-4 z-10 bg-red-600/90 text-white text-xs font-bold px-2 py-1 rounded shadow animate-pulse">
-                • LIVE
+                <div class="card card-sm">
+                    <div class="card-label">Camera</div>
+                    <div class="card-val" id="h-cam">--</div>
+                    <div class="card-sub">Timelapse: <span id="h-tl">--</span></div>
+                </div>
+                <div class="card card-sm">
+                    <div class="card-label">Recording</div>
+                    <div class="card-val" id="h-rec">--</div>
+                </div>
             </div>
-
-            <iframe src="http://localhost:1984/stream.html?src=p2s_camera&mode=webrtc"
-                class="w-full h-full border-none pointer-events-none" allow="autoplay; fullscreen" muted>
-            </iframe>
-
+            <div style="height:12px"></div>
+            <div class="grid g2">
+                <div class="card card-sm">
+                    <div class="card-label">Chamber Light</div>
+                    <div class="card-val"><span id="h-cl-dot" class="dot off"></span><span id="h-cl">off</span></div>
+                </div>
+                <div class="card card-sm">
+                    <div class="card-label">Work Light</div>
+                    <div class="card-val"><span id="h-wl-dot" class="dot off"></span><span id="h-wl">off</span></div>
+                </div>
+            </div>
+            <div style="height:12px"></div>
+            <div class="card">
+                <div class="card-label">HMS Alerts</div>
+                <div id="hms-list" class="no-alerts">No active alerts ✓</div>
+            </div>
         </div>
 
-        <!-- Footer -->
-        <p class="text-center text-[10px] text-gray-700 mt-4 tracking-wide">LOCAL GATEWAY · NOT CLOUD CONNECTED</p>
-    </main>
+        <!-- CONTROLS -->
+        <div id="p-controls" class="panel">
+            <div class="section-title">Print Controls</div>
+            <div class="grid g3" style="margin-bottom:12px">
+                <button class="btn accent" id="btn-pause-resume" onclick="togglePauseResume()">⏸ Pause</button>
+                <button class="btn danger" id="btn-stop" onclick="stopPrint()">⏹ Stop</button>
+                <button class="btn" id="btn-light" onclick="toggleLight()">☀️ Light</button>
+            </div>
+            <div class="section-title">Upload & Print Options</div>
+            <div class="toggle-row"><label>Auto Bed Leveling</label><label class="toggle"><input type="checkbox"
+                        id="tog-abl"><span class="slider"></span></label></div>
+            <div class="toggle-row"><label>Flow Dynamic Calibration</label><label class="toggle"><input type="checkbox"
+                        id="tog-flow"><span class="slider"></span></label></div>
+            <div style="height:8px"></div>
+            <div class="drop-zone" id="drop-zone">
+                <input type="file" id="file-input" accept=".3mf">
+                <p style="font-size:1.5rem;margin-bottom:6px">📦</p>
+                <p style="font-size:13px;color:var(--dim)">Drop <span
+                        style="color:#4ade80;font-weight:600">.gcode.3mf</span> here or <span
+                        style="text-decoration:underline">browse</span></p>
+                <p id="upload-status"></p>
+            </div>
+            <div class="live-wrap">
+                <div class="live-badge">● LIVE</div><iframe
+                    src="http://localhost:1984/stream.html?src=p2s_camera&mode=webrtc"
+                    allow="autoplay;fullscreen"></iframe>
+            </div>
+        </div>
 
+        <footer>LOCAL GATEWAY · NOT CLOUD CONNECTED</footer>
+    </div>
     <script>
-        /* ─── WebSocket Telemetry ─── */
-        const WS_URL = `ws://${location.host}/ws`;
-        let ws = null;
-        let reconnectTimer = null;
-
         const $ = id => document.getElementById(id);
-        const badge = $('status-badge');
-        const nozzle = $('nozzle-temp');
-        const bed = $('bed-temp');
-        const chamber = $('chamber-temp');
-        const progBar = $('progress-bar');
-        const progTxt = $('progress-text');
-        const statusTxt = $('printer-status-text');
-        const uploadStatus = $('upload-status');
+        const WS_URL = `ws://${location.host}/ws`;
+        let ws, reconTimer, pingInterval;
+        const spdNames = { 1: 'Silent', 2: 'Standard', 3: 'Sport', 4: 'Ludicrous' };
+        function fanPct(v) { const n = parseInt(v) || 0; return n > 15 ? Math.round(n / 255 * 100) + '%' : n + '%' }
+        function fmtTime(m) { if (!m || m <= 0) return '--'; const h = Math.floor(m / 60); return h > 0 ? h + 'h ' + (m % 60) + 'm' : (m % 60) + 'm' }
+        function r(v) { return v === '--' ? '--' : Math.round(parseFloat(v) || 0) }
+        function setText(id, v) { const e = $(id); if (e) e.textContent = v }
 
+        function applyState(d) {
+            setText('o-nozzle', r(d.nozzle_temp)); setText('o-bed', r(d.bed_temp)); setText('o-chamber', r(d.chamber_temp));
+            setText('o-nozzle-t', r(d.nozzle_target)); setText('o-bed-t', r(d.bed_target)); setText('o-status', d.status || '--');
+            setText('job-name', d.subtask_name || '--'); setText('layer-info', 'Layer ' + (d.layer_num || 0) + ' / ' + (d.total_layers || 0));
+            setText('eta', fmtTime(d.remaining_time)); setText('task-id', d.task_id || '--');
+            const p = parseInt(d.progress) || 0; $('prog-bar').style.width = p + '%'; setText('prog-txt', p + '%');
+            setText('t-nozzle', r(d.nozzle_temp)); setText('t-bed', r(d.bed_temp)); setText('t-chamber', r(d.chamber_temp));
+            setText('t-nozzle-t', r(d.nozzle_target)); setText('t-bed-t', r(d.bed_target));
+            setText('t-ntype', d.nozzle_type || '--'); setText('t-ndia', d.nozzle_diameter || '--');
+            setText('f-cool', fanPct(d.cooling_fan)); setText('f-big1', fanPct(d.big_fan1));
+            setText('f-big2', fanPct(d.big_fan2)); setText('f-hb', fanPct(d.heatbreak_fan));
+            setText('f-mag', d.spd_mag || 100); setText('f-lvl', d.spd_lvl || 2); setText('f-preset', spdNames[d.spd_lvl] || 'Custom');
+            setText('h-wifi', d.wifi_signal || '--'); setText('h-sd', d.sdcard ? 'Inserted' : 'None'); setText('h-plate', d.plate_type || '--');
+            setText('h-filament', d.filament_type || '--'); setText('h-cam', d.ipcam_resolution || '--');
+            setText('h-tl', d.ipcam_timelapse || '--'); setText('h-rec', d.ipcam_record || '--');
+            if (d.filament_color && d.filament_color !== '--') $('h-swatch').style.background = '#' + d.filament_color.substring(0, 6);
+            const cl = d.chamber_light || 'off', wl = d.work_light || 'off';
+            setText('h-cl', cl); $('h-cl-dot').className = 'dot ' + (cl === 'on' ? 'on' : cl === 'flashing' ? 'flash' : 'off');
+            setText('h-wl', wl); $('h-wl-dot').className = 'dot ' + (wl === 'on' ? 'on' : wl === 'flashing' ? 'flash' : 'off');
+            const hl = $('hms-list');
+            if (d.hms && d.hms.length > 0) { hl.innerHTML = ''; hl.className = ''; d.hms.forEach(h => { const e = document.createElement('div'); e.className = 'hms-item'; e.textContent = '⚠ Code: ' + h.code + ' (attr: ' + h.attr + ')'; hl.appendChild(e) }) }
+            else { hl.innerHTML = 'No active alerts ✓'; hl.className = 'no-alerts' }
+            updateBadge(d.status);
+            updatePauseResumeBtn(d.status);
+        }
+
+        function updateBadge(s) {
+            const b = $('badge'); if (!b) return; b.textContent = s || '--'; b.className = 'badge';
+            if (['RECONNECTING', 'CONNECTING', 'PREPARING'].includes(s)) b.className = 'badge warn';
+            else if (['ERROR', 'FAILED', 'OFFLINE'].includes(s)) b.className = 'badge err'
+        }
+
+        /* Tabs */
+        document.querySelectorAll('.tab').forEach(t => {
+            t.onclick = () => {
+                document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+                t.classList.add('active'); $('p-' + t.dataset.tab).classList.add('active')
+            }
+        });
+
+        /* WebSocket - fixed reconnect + auto-refresh */
         function connectWS() {
+            if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
             ws = new WebSocket(WS_URL);
-
             ws.onopen = () => {
-                badge.textContent = 'ONLINE';
-                badge.classList.remove('status-connecting');
-                badge.classList.add('bg-neon-500/20', 'border-neon-500/40');
-                clearTimeout(reconnectTimer);
-                // Send a keepalive ping every 25s
-                setInterval(() => { if (ws.readyState === 1) ws.send('ping'); }, 25000);
+                updateBadge('ONLINE'); clearTimeout(reconTimer);
+                if (pingInterval) clearInterval(pingInterval);
+                pingInterval = setInterval(() => { if (ws.readyState === 1) ws.send('ping') }, 25000)
             };
-
-            ws.onmessage = (e) => {
-                try {
-                    const d = JSON.parse(e.data);
-                    if (d.nozzle_temp !== undefined && d.nozzle_temp !== '--')
-                        nozzle.textContent = Math.round(d.nozzle_temp);
-                    if (d.bed_temp !== undefined && d.bed_temp !== '--')
-                        bed.textContent = Math.round(d.bed_temp);
-                    if (d.chamber_temp !== undefined && d.chamber_temp !== '--')
-                        chamber.textContent = Math.round(d.chamber_temp);
-                    if (d.progress !== undefined) {
-                        const p = parseInt(d.progress);
-                        progBar.style.width = p + '%';
-                        progTxt.textContent = p + '%';
-                    }
-                    if (d.status) {
-                        statusTxt.textContent = d.status;
-                        // Update badge for key states
-                        if (d.status === 'ONLINE' || d.status === 'PRINTING' || d.status === 'IDLE') {
-                            badge.textContent = d.status;
-                            badge.className = 'px-4 py-1.5 rounded-full text-xs font-semibold tracking-widest uppercase border border-neon-500/30 bg-neon-500/10 text-neon-400';
-                        } else if (d.status === 'RECONNECTING' || d.status === 'CONNECTING') {
-                            badge.textContent = d.status + '…';
-                            badge.className = 'status-connecting px-4 py-1.5 rounded-full text-xs font-semibold tracking-widest uppercase border border-yellow-500/30 bg-yellow-500/10 text-yellow-400';
-                        } else if (d.status === 'ERROR' || d.status === 'FAILED') {
-                            badge.textContent = d.status;
-                            badge.className = 'px-4 py-1.5 rounded-full text-xs font-semibold tracking-widest uppercase border border-red-500/30 bg-red-500/10 text-red-400';
-                        }
-                    }
-                } catch (_) { }
-            };
-
-            ws.onclose = () => {
-                badge.textContent = 'OFFLINE';
-                badge.className = 'status-connecting px-4 py-1.5 rounded-full text-xs font-semibold tracking-widest uppercase border border-red-500/30 bg-red-500/10 text-red-400';
-                reconnectTimer = setTimeout(connectWS, 3000);
-            };
-
+            ws.onmessage = e => { try { applyState(JSON.parse(e.data)) } catch (_) { } };
+            ws.onclose = () => { updateBadge('OFFLINE'); if (pingInterval) clearInterval(pingInterval); reconTimer = setTimeout(connectWS, 2000) };
             ws.onerror = () => ws.close();
         }
-
         connectWS();
 
-        /* ─── Light Control ─── */
-        async function controlLight(action) {
-            const btn = action === 'on' ? $('btn-light-on') : $('btn-light-off');
-            btn.classList.add('opacity-50');
-            try {
-                const res = await fetch(`/api/light/${action}`, { method: 'POST' });
-                const data = await res.json();
-                if (data.status === 'success') {
-                    btn.classList.add('ring-1', 'ring-neon-500/50');
-                    setTimeout(() => btn.classList.remove('ring-1', 'ring-neon-500/50'), 1500);
-                }
-            } catch (err) {
-                console.error('Light control error:', err);
-            } finally {
-                btn.classList.remove('opacity-50');
-            }
+        /* Also poll /api/status every 5s as fallback */
+        setInterval(async () => { try { const r = await fetch('/api/status'); const d = await r.json(); applyState(d) } catch (_) { } }, 2000);
+
+        /* Print control */
+        let currentStatus = '';
+        async function ctrlPrint(action) {
+            try { const r = await fetch('/api/print/' + action, { method: 'POST' }); const d = await r.json(); console.log(d) } catch (e) { console.error(e) }
+        }
+        function togglePauseResume() {
+            if (currentStatus === 'PAUSED') { ctrlPrint('resume') } else { ctrlPrint('pause') }
+        }
+        function stopPrint() {
+            if (confirm('Are you sure you want to stop the current print? This cannot be undone.')) { ctrlPrint('stop') }
+        }
+        let lightOn = false;
+        function toggleLight() {
+            lightOn = !lightOn; fetch('/api/light/' + (lightOn ? 'on' : 'off'), { method: 'POST' }).catch(e => console.error(e));
+        }
+        function updatePauseResumeBtn(status) {
+            currentStatus = status;
+            const btn = $('btn-pause-resume');
+            if (!btn) return;
+            if (status === 'PAUSED') { btn.textContent = '▶ Resume'; btn.className = 'btn accent' }
+            else if (status === 'PRINTING') { btn.textContent = '⏸ Pause'; btn.className = 'btn warn' }
+            else { btn.textContent = '⏸ Pause'; btn.className = 'btn warn' }
         }
 
-        /* ─── File Upload (Drag & Drop + Click) ─── */
-        const dropZone = $('drop-zone');
-        const fileInput = $('file-input');
+        /* Upload */
+        const dz = $('drop-zone'), fi = $('file-input');
+        dz.onclick = e => { if (e.target.tagName !== 'INPUT') fi.click() };
+        fi.onchange = e => { if (e.target.files.length) upload(e.target.files[0]) };
+        ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag-over') }));
+        ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag-over') }));
+        dz.addEventListener('drop', e => { if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]) });
 
-        dropZone.addEventListener('click', () => fileInput.click());
-
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) uploadFile(e.target.files[0]);
-        });
-
-        ['dragenter', 'dragover'].forEach(evt => {
-            dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-        });
-        ['dragleave', 'drop'].forEach(evt => {
-            dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); });
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            const file = e.dataTransfer.files[0];
-            if (file) uploadFile(file);
-        });
-
-        async function uploadFile(file) {
-            if (!file.name.endsWith('.3mf')) {
-                uploadStatus.textContent = '⚠ Only .gcode.3mf files accepted';
-                uploadStatus.className = 'text-xs text-red-400 mt-1';
-                return;
-            }
-
-            uploadStatus.textContent = `⏳ Uploading ${file.name}…`;
-            uploadStatus.className = 'text-xs text-yellow-400 mt-1';
-            dropZone.classList.add('opacity-60', 'pointer-events-none');
-
+        async function upload(file) {
+            const us = $('upload-status');
+            if (!file.name.endsWith('.3mf')) { us.textContent = '⚠ Only .gcode.3mf files'; us.style.color = '#ef4444'; return }
+            us.textContent = '⏳ Uploading ' + file.name + '…'; us.style.color = '#facc15';
+            dz.style.opacity = '.5'; dz.style.pointerEvents = 'none';
+            const abl = $('tog-abl').checked ? 2 : 0;
+            const fc = $('tog-flow').checked ? 2 : 0;
             try {
-                const formData = new FormData();
-                formData.append('file', file);
-                const res = await fetch('/upload', { method: 'POST', body: formData });
-                const data = await res.json();
-
-                if (data.status === 'success') {
-                    uploadStatus.textContent = `✅ ${data.message}`;
-                    uploadStatus.className = 'text-xs text-neon-400 mt-1';
-                } else {
-                    uploadStatus.textContent = `❌ ${data.message}`;
-                    uploadStatus.className = 'text-xs text-red-400 mt-1';
-                }
-            } catch (err) {
-                uploadStatus.textContent = '❌ Upload failed — check console';
-                uploadStatus.className = 'text-xs text-red-400 mt-1';
-                console.error(err);
-            } finally {
-                dropZone.classList.remove('opacity-60', 'pointer-events-none');
-                fileInput.value = '';
-            }
+                const fd = new FormData(); fd.append('file', file);
+                const url = '/upload?auto_bed_leveling=' + abl + '&flow_cali=' + fc;
+                const res = await fetch(url, { method: 'POST', body: fd }); const d = await res.json();
+                us.textContent = d.status === 'success' ? '✅ ' + d.message : '❌ ' + d.message;
+                us.style.color = d.status === 'success' ? '#4ade80' : '#ef4444';
+            } catch (e) { us.textContent = '❌ Upload failed'; us.style.color = '#ef4444' }
+            finally { dz.style.opacity = '1'; dz.style.pointerEvents = 'auto'; fi.value = '' }
         }
     </script>
 </body>

@@ -4,6 +4,7 @@ FastAPI backend bridging the web UI to the printer's local MQTT/FTPS network.
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import ssl
@@ -21,6 +22,20 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ftplib import FTP_TLS, FTP
+import logging
+
+# ──────────────────────────────────────────────
+# Logging Setup
+# ──────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("printer_mqtt.log")
+    ]
+)
+logger = logging.getLogger("BambuMQTT")
+
 # ──────────────────────────────────────────────
 # Configuration
 # ──────────────────────────────────────────────
@@ -77,11 +92,54 @@ MQTT_USERNAME = "bblp"
 # Shared State
 # ──────────────────────────────────────────────
 printer_state: dict = {
+    # Temperatures
     "nozzle_temp": "--",
+    "nozzle_target": 0,
     "bed_temp": "--",
+    "bed_target": 0,
     "chamber_temp": "--",
+    # Print progress
     "progress": 0,
     "status": "CONNECTING",
+    "remaining_time": 0,
+    "layer_num": 0,
+    "total_layers": 0,
+    # Job info
+    "subtask_name": "--",
+    "gcode_file": "--",
+    "task_id": "--",
+    "print_type": "--",
+    # Fans
+    "cooling_fan": "0",
+    "big_fan1": "0",
+    "big_fan2": "0",
+    "heatbreak_fan": "0",
+    # Speed
+    "spd_lvl": 2,
+    "spd_mag": 100,
+    # Hardware
+    "nozzle_type": "--",
+    "nozzle_diameter": "--",
+    "wifi_signal": "--",
+    "sdcard": False,
+    # Lights
+    "chamber_light": "off",
+    "work_light": "off",
+    # HMS (Health Management System) alerts
+    "hms": [],
+    # Camera
+    "ipcam_resolution": "--",
+    "ipcam_timelapse": "--",
+    "ipcam_record": "--",
+    # AMS
+    "ams_status": 0,
+    "filament_type": "--",
+    "filament_color": "--",
+    # Misc
+    "print_error": 0,
+    "mc_print_error_code": "0",
+    "prepare_percent": 0,
+    "plate_type": "--",
 }
 
 # Active WebSocket connections
@@ -124,7 +182,7 @@ def schedule_broadcast():
 # ──────────────────────────────────────────────
 def on_connect(client: mqtt.Client, userdata, flags, rc):
     if rc == 0:
-        print(f"[MQTT] Connected to {PRINTER_IP}:{MQTT_PORT}", flush=True)
+        logger.info(f"[MQTT] Connected to {PRINTER_IP}:{MQTT_PORT}")
         printer_state["status"] = "ONLINE"
         client.subscribe(f"device/{PRINTER_SERIAL}/report")
 
@@ -142,73 +200,98 @@ def on_connect(client: mqtt.Client, userdata, flags, rc):
             json.dumps(push_payload, separators=(",", ":")),
             qos=1,
         )
+        logger.info(f"[MQTT SEND] pushall requested")
         schedule_broadcast()
     else:
-        print(f"[MQTT] Connection failed with code: {rc}", flush=True)
+        logger.error(f"[MQTT] Connection failed with code: {rc}")
         printer_state["status"] = "ERROR"
         schedule_broadcast()
 
 
 def on_disconnect(client: mqtt.Client, userdata, rc):
-    print(f"[MQTT] Disconnected (rc={rc}). Reconnecting...", flush=True)
+    logger.info(f"[MQTT] Disconnected (rc={rc}). Reconnecting...")
     printer_state["status"] = "RECONNECTING"
     schedule_broadcast()
 
 
 def on_message(client: mqtt.Client, userdata, msg):
-    """Extract telemetry from the massive push_status JSON blob with fallbacks."""
+    """Extract comprehensive telemetry from the push_status JSON blob."""
     global printer_state
     try:
-        data = json.loads(msg.payload.decode("utf-8"))
+        raw_payload = msg.payload.decode("utf-8")
+        logger.info(f"[MQTT RECV] Topic: {msg.topic} | Payload: {raw_payload}")
+        data = json.loads(raw_payload)
         if "print" not in data:
             return
 
-        print_data = data["print"]
+        p = data["print"]
         updated = False
 
-        # 1. Nozzle Temperature
-        if "nozzle_temper" in print_data:
-            printer_state["nozzle_temp"] = print_data["nozzle_temper"]
+        # ── Temperatures ──
+        if "nozzle_temper" in p:
+            printer_state["nozzle_temp"] = p["nozzle_temper"]
             updated = True
-        elif "device" in print_data and "extruder" in print_data["device"]:
+        elif "device" in p and "extruder" in p.get("device", {}):
             try:
-                printer_state["nozzle_temp"] = print_data["device"]["extruder"]["info"][0]["temp"]
+                printer_state["nozzle_temp"] = p["device"]["extruder"]["info"][0]["temp"]
                 updated = True
             except (KeyError, IndexError):
                 pass
-
-        # 2. Bed Temperature
-        if "bed_temper" in print_data:
-            printer_state["bed_temp"] = print_data["bed_temper"]
+        if "nozzle_target_temper" in p:
+            printer_state["nozzle_target"] = p["nozzle_target_temper"]
             updated = True
-        elif "device" in print_data and "bed" in print_data["device"]:
+
+        if "bed_temper" in p:
+            printer_state["bed_temp"] = p["bed_temper"]
+            updated = True
+        elif "device" in p and "bed" in p.get("device", {}):
             try:
-                printer_state["bed_temp"] = print_data["device"]["bed"]["info"]["temp"]
+                printer_state["bed_temp"] = p["device"]["bed"]["info"]["temp"]
+                updated = True
+            except KeyError:
+                pass
+        if "bed_target_temper" in p:
+            printer_state["bed_target"] = p["bed_target_temper"]
+            updated = True
+
+        if "chamber_temper" in p:
+            printer_state["chamber_temp"] = p["chamber_temper"]
+            updated = True
+        elif "info" in p and isinstance(p["info"], dict) and "temp" in p["info"]:
+            printer_state["chamber_temp"] = p["info"]["temp"]
+            updated = True
+        elif "device" in p and "ctc" in p.get("device", {}):
+            try:
+                printer_state["chamber_temp"] = p["device"]["ctc"]["info"]["temp"]
                 updated = True
             except KeyError:
                 pass
 
-        # 3. Chamber Temperature
-        if "chamber_temper" in print_data:
-            printer_state["chamber_temp"] = print_data["chamber_temper"]
+        # ── Print Progress ──
+        if "mc_percent" in p:
+            printer_state["progress"] = p["mc_percent"]
             updated = True
-        elif "info" in print_data and "temp" in print_data["info"]:
-            printer_state["chamber_temp"] = print_data["info"]["temp"]
+        if "mc_remaining_time" in p:
+            printer_state["remaining_time"] = p["mc_remaining_time"]
             updated = True
-        elif "device" in print_data and "ctc" in print_data["device"]:
-            try:
-                printer_state["chamber_temp"] = print_data["device"]["ctc"]["info"]["temp"]
+
+        # ── Layers ──
+        if "layer_num" in p:
+            printer_state["layer_num"] = p["layer_num"]
+            updated = True
+        if "total_layer_num" in p:
+            printer_state["total_layers"] = p["total_layer_num"]
+            updated = True
+        elif "3D" in p:
+            if "layer_num" in p["3D"]:
+                printer_state["layer_num"] = p["3D"]["layer_num"]
                 updated = True
-            except KeyError:
-                pass
+            if "total_layer_num" in p["3D"]:
+                printer_state["total_layers"] = p["3D"]["total_layer_num"]
+                updated = True
 
-        # 4. Progress
-        if "mc_percent" in print_data:
-            printer_state["progress"] = print_data["mc_percent"]
-            updated = True
-
-        # 5. Status / G-code State
-        if "gcode_state" in print_data:
+        # ── Status / G-code State ──
+        if "gcode_state" in p:
             state_map = {
                 "IDLE": "IDLE",
                 "PREPARE": "PREPARING",
@@ -217,9 +300,106 @@ def on_message(client: mqtt.Client, userdata, msg):
                 "FINISH": "FINISHED",
                 "FAILED": "FAILED",
             }
-            printer_state["status"] = state_map.get(
-                print_data["gcode_state"], print_data["gcode_state"]
-            )
+            printer_state["status"] = state_map.get(p["gcode_state"], p["gcode_state"])
+            updated = True
+
+        # ── Job Info ──
+        if "subtask_name" in p and p["subtask_name"]:
+            printer_state["subtask_name"] = p["subtask_name"]
+            updated = True
+        if "gcode_file" in p:
+            printer_state["gcode_file"] = p["gcode_file"]
+            updated = True
+        if "task_id" in p:
+            printer_state["task_id"] = p["task_id"]
+            updated = True
+        if "print_type" in p:
+            printer_state["print_type"] = p["print_type"]
+            updated = True
+        if "gcode_file_prepare_percent" in p:
+            printer_state["prepare_percent"] = p["gcode_file_prepare_percent"]
+            updated = True
+
+        # ── Fans ──
+        if "cooling_fan_speed" in p:
+            printer_state["cooling_fan"] = p["cooling_fan_speed"]
+            updated = True
+        if "big_fan1_speed" in p:
+            printer_state["big_fan1"] = p["big_fan1_speed"]
+            updated = True
+        if "big_fan2_speed" in p:
+            printer_state["big_fan2"] = p["big_fan2_speed"]
+            updated = True
+        if "heatbreak_fan_speed" in p:
+            printer_state["heatbreak_fan"] = p["heatbreak_fan_speed"]
+            updated = True
+
+        # ── Speed ──
+        if "spd_lvl" in p:
+            printer_state["spd_lvl"] = p["spd_lvl"]
+            updated = True
+        if "spd_mag" in p:
+            printer_state["spd_mag"] = p["spd_mag"]
+            updated = True
+
+        # ── Hardware Info ──
+        if "nozzle_type" in p:
+            printer_state["nozzle_type"] = p["nozzle_type"]
+            updated = True
+        if "nozzle_diameter" in p:
+            printer_state["nozzle_diameter"] = p["nozzle_diameter"]
+            updated = True
+        if "wifi_signal" in p:
+            printer_state["wifi_signal"] = p["wifi_signal"]
+            updated = True
+        if "sdcard" in p:
+            printer_state["sdcard"] = p["sdcard"]
+            updated = True
+
+        # ── Lights ──
+        if "lights_report" in p:
+            for light in p["lights_report"]:
+                if light.get("node") == "chamber_light":
+                    printer_state["chamber_light"] = light.get("mode", "off")
+                elif light.get("node") == "work_light":
+                    printer_state["work_light"] = light.get("mode", "off")
+            updated = True
+
+        # ── HMS Alerts ──
+        if "hms" in p:
+            printer_state["hms"] = p["hms"]
+            updated = True
+
+        # ── Camera ──
+        if "ipcam" in p:
+            ipcam = p["ipcam"]
+            printer_state["ipcam_resolution"] = ipcam.get("resolution", "--")
+            printer_state["ipcam_timelapse"] = ipcam.get("timelapse", "--")
+            printer_state["ipcam_record"] = ipcam.get("ipcam_record", "--")
+            updated = True
+
+        # ── AMS / Filament ──
+        if "ams_status" in p:
+            printer_state["ams_status"] = p["ams_status"]
+            updated = True
+        if "vir_slot" in p and len(p["vir_slot"]) > 0:
+            slot = p["vir_slot"][0]
+            printer_state["filament_type"] = slot.get("tray_type", "--")
+            printer_state["filament_color"] = slot.get("tray_color", "--")
+            updated = True
+
+        # ── Errors ──
+        if "print_error" in p:
+            printer_state["print_error"] = p["print_error"]
+            updated = True
+        if "mc_print_error_code" in p:
+            printer_state["mc_print_error_code"] = p["mc_print_error_code"]
+            updated = True
+
+        # ── Bed Plate ──
+        if "device" in p and "plate" in p.get("device", {}):
+            plate = p["device"]["plate"]
+            printer_state["plate_type"] = plate.get("cur_id", "--")
             updated = True
 
         if updated:
@@ -228,7 +408,7 @@ def on_message(client: mqtt.Client, userdata, msg):
     except json.JSONDecodeError:
         pass
     except Exception as e:
-        print(f"[MQTT] Message parse error: {e}", flush=True)
+        logger.error(f"[MQTT] Message parse error: {e}")
 
 
 # ──────────────────────────────────────────────
@@ -256,7 +436,7 @@ def mqtt_loop_thread(client: mqtt.Client):
             client.connect(PRINTER_IP, MQTT_PORT, 60)
             client.loop_forever()
         except Exception as e:
-            print(f"[MQTT] Connection error: {e}. Retrying in 5s...", flush=True)
+            logger.error(f"[MQTT] Connection error: {e}. Retrying in 5s...")
             printer_state["status"] = "RECONNECTING"
             schedule_broadcast()
             time.sleep(5)
@@ -274,7 +454,7 @@ def mqtt_publish(topic_suffix: str, payload: dict):
     # CRITICAL: The ESP32 JSON parser crashes on whitespace
     raw = json.dumps(payload, separators=(",", ":"))
     mqtt_client.publish(topic, raw, qos=1)
-    print(f"[MQTT] Published to {topic}: {raw}", flush=True)
+    logger.info(f"[MQTT SEND] Topic: {topic} | Payload: {raw}")
 
 
 # ──────────────────────────────────────────────
@@ -290,7 +470,7 @@ async def lifespan(app: FastAPI):
         target=mqtt_loop_thread, args=(mqtt_client,), daemon=True
     )
     mqtt_thread.start()
-    print("[Server] MQTT background thread started.", flush=True)
+    logger.info("[Server] MQTT background thread started.")
 
     yield
 
@@ -298,7 +478,7 @@ async def lifespan(app: FastAPI):
     if mqtt_client:
         mqtt_client.loop_stop()
         mqtt_client.disconnect()
-    print("[Server] MQTT client disconnected.", flush=True)
+    logger.info("[Server] MQTT client disconnected.")
 
 
 # ──────────────────────────────────────────────
@@ -346,7 +526,7 @@ async def get_status():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     ws_clients.add(websocket)
-    print(f"[WS] Client connected. Total: {len(ws_clients)}", flush=True)
+    logger.info(f"[WS] Client connected. Total: {len(ws_clients)}")
 
     # Send current state immediately on connect
     try:
@@ -362,7 +542,7 @@ async def websocket_endpoint(websocket: WebSocket):
         pass
     finally:
         ws_clients.discard(websocket)
-        print(f"[WS] Client disconnected. Total: {len(ws_clients)}", flush=True)
+        logger.info(f"[WS] Client disconnected. Total: {len(ws_clients)}")
 
 
 # ──────────────────────────────────────────────
@@ -396,13 +576,48 @@ async def control_light(action: str):
 
 
 # ──────────────────────────────────────────────
+# Print Controls: Pause / Resume / Stop
+# ──────────────────────────────────────────────
+@app.post("/api/print/{action}")
+async def control_print(action: str):
+    """Pause, resume, or stop the current print job."""
+    action = action.lower()
+    if action not in ("pause", "resume", "stop"):
+        return JSONResponse(
+            content={"status": "error", "message": "Invalid action. Use pause/resume/stop."},
+            status_code=400,
+        )
+    seq_map = {"pause": "20005", "resume": "20006", "stop": "20007"}
+    payload = {
+        "print": {
+            "command": action,
+            "param": "",
+            "sequence_id": seq_map[action],
+        }
+    }
+    try:
+        mqtt_publish("request", payload)
+        return JSONResponse(content={"status": "success", "action": action, "message": f"Print {action} sent."})
+    except Exception as e:
+        return JSONResponse(content={"status": "error", "message": str(e)}, status_code=500)
+
+
+# ──────────────────────────────────────────────
 # Web Spooler: FTPS Upload + Auto-Print
 # ──────────────────────────────────────────────
 @app.post("/upload")
-async def upload_gcode(file: UploadFile = File(...)):
+async def upload_gcode(
+    file: UploadFile = File(...),
+    auto_bed_leveling: int = 0,
+    flow_cali: int = 0,
+):
     """
     Upload a .gcode.3mf file to the printer via FTPS (Implicit TLS, port 990),
     then publish an MQTT command to start the print.
+    Replicates the exact Bambu Studio MQTT calling chain.
+    Query params:
+      - auto_bed_leveling: 0=off, 2=on
+      - flow_cali: 0=off, 2=on (extrude_cali_flag)
     """
     filename = file.filename or "upload.gcode.3mf"
 
@@ -421,8 +636,21 @@ async def upload_gcode(file: UploadFile = File(...)):
         )
 
     try:
-        # ── FTPS Upload ──
-        # CRITICAL: Bypass SSL for the printer's self-signed certificate
+        # ── Step 1: Clear FINISH state if needed ──
+        current_state = printer_state.get("status", "")
+        if current_state in ("FINISHED", "FAILED"):
+            logger.info(f"[UPLOAD] Printer in {current_state} state, sending stop to clear...")
+            stop_payload = {
+                "print": {
+                    "command": "stop",
+                    "sequence_id": "20000",
+                    "param": "",
+                }
+            }
+            mqtt_publish("request", stop_payload)
+            await asyncio.sleep(2)
+
+        # ── Step 2: FTPS Upload ──
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
@@ -430,24 +658,58 @@ async def upload_gcode(file: UploadFile = File(...)):
         ftps = ImplicitFTP_TLS(context=ctx)
         ftps.connect(PRINTER_IP, FTPS_PORT)
         ftps.login(MQTT_USERNAME, ACCESS_CODE)
-        ftps.prot_p()  # Switch to protected (encrypted) data connection
+        ftps.prot_p()
 
         ftps.storbinary(f"STOR {filename}", BytesIO(file_content))
         ftps.quit()
-        print(f"[FTPS] Uploaded '{filename}' successfully.", flush=True)
+        logger.info(f"[FTPS] Uploaded '{filename}' successfully.")
 
-        # ── Trigger Print via MQTT ──
-        # print_payload = {
-        #     "print": {
-        #         "sequence_id": "2",
-        #         "command": "project_file",
-        #         "param": filename,
-        #         "subtask_name": "remote_print",
-        #         "file": filename,
-        #         "ams_mapping": [255],
-        #     }
-        # }
-        # mqtt_publish("request", print_payload)
+        # ── Step 3: Compute MD5 hash ──
+        file_md5 = hashlib.md5(file_content).hexdigest().upper()
+
+        # ── Step 4: Trigger Print via MQTT ──
+        subtask_name = filename.replace(".gcode.3mf", "")
+        print_payload = {
+            "print": {
+                "command": "project_file",
+                "sequence_id": "20001",
+                "param": "Metadata/plate_1.gcode",
+                "url": f"ftp:///{filename}",
+                "md5": file_md5,
+                "project_id": "0",
+                "profile_id": "0",
+                "task_id": "0",
+                "subtask_id": "0",
+                "subtask_name": subtask_name,
+                "file": filename,
+                "cfg": "0",
+                "use_ams": False,
+                "ams_mapping": [-1],
+                "ams_mapping2": [{"ams_id": 255, "slot_id": 0}],
+                "bed_type": "textured_plate",
+                "bed_leveling": False,
+                "auto_bed_leveling": auto_bed_leveling,
+                "timelapse": False,
+                "vibration_cali": False,
+                "flow_cali": False,
+                "layer_inspect": True,
+                "nozzle_offset_cali": 2,
+                "extrude_cali_flag": flow_cali,
+                "extrude_cali_manual_mode": 0,
+            }
+        }
+        mqtt_publish("request", print_payload)
+
+        # ── Step 5: Request fresh state push ──
+        push_payload = {
+            "pushing": {
+                "sequence_id": "1",
+                "command": "pushall",
+                "push_target": 1,
+                "version": 1,
+            }
+        }
+        mqtt_publish("request", push_payload)
 
         return JSONResponse(
             content={
@@ -458,7 +720,7 @@ async def upload_gcode(file: UploadFile = File(...)):
         )
 
     except Exception as e:
-        print(f"[FTPS] Upload error: {e}", flush=True)
+        logger.error(f"[FTPS] Upload error: {e}")
         return JSONResponse(
             content={"status": "error", "message": f"Upload failed: {str(e)}"},
             status_code=500,
@@ -476,5 +738,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=5000,
         reload=False,
-        log_level="info",
+        log_level="error",
     )
