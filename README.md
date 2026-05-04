@@ -95,4 +95,4 @@ If this tool saved your print farm from cloud outages or region-lock headaches, 
 Pull requests are welcome. For major architectural changes, please open an issue first to discuss what you would like to change.
 
 Author: Shayer Mahmud Sowmik
-Originally created for `BOT Engineers`, Bangladesh.
+Originally created for [Bot Engineers](https://github.com/bot-engineers), Bangladesh.
